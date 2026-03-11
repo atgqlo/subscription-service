@@ -5,10 +5,7 @@ services:
     image: postgres:16-alpine
     ports:
       - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: subscriptions
+    env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,10 +21,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: >
-      migrate -path=/database/migrations 
-      -database=postgres://postgres:password@postgres:5432/subscriptions?sslmode=disable 
-      up
+    entrypoint: ["migrate"]
+    command:
+      - "-path=/database/migrations"
+      - "-database=postgres://postgres:password@postgres:5432/subscriptions?sslmode=disable"
+      - "up"
 
   app:
     build: .
@@ -36,9 +34,7 @@ services:
     depends_on:
       - postgres
       - migrate
-    environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
+    env_file: .env
 
 volumes:
   postgres_data:

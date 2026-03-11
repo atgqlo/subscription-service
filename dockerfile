@@ -5,7 +5,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -o main cmd/app/main.go  # ← cmd/app/ путь к main.go
+RUN go build -o main cmd/app/main.go
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
