@@ -23,35 +23,41 @@ func NewSubscriptionHandler(service *service.SubscriptionService, log *log.Logge
 }
 
 type CreateRequest struct {
-	ServiceName string    `json:"service_name" binding:"required"`
-	Price       int       `json:"price" binding:"required,min=0"`
-	UserID      uuid.UUID `json:"user_id" binding:"required,uuid"`
-	StartDate   string    `json:"start_date" binding:"required,len=7"`
-	EndDate     *string   `json:"end_date"`
+	ServiceName string  `json:"service_name" binding:"required"`
+	Price       int     `json:"price" binding:"required,min=0"`
+	UserID      string  `json:"user_id" binding:"required"`
+	StartDate   string  `json:"start_date" binding:"required,len=7"`
+	EndDate     *string `json:"end_date"`
 }
 
 func (h *Handlers) CreateHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var req CreateRequest
 		if err := ctx.ShouldBindJSON(&req); err != nil {
-			h.log.Printf("bad request:%v", err)
+			h.log.Printf("bind error: %v", err)
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		created := &models.Subscription{
+
+		userUUID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id UUID"})
+			return
+		}
+		sub := &models.Subscription{
 			ServiceName: req.ServiceName,
 			Price:       req.Price,
-			UserID:      req.UserID,
+			UserID:      userUUID,
 			StartDate:   req.StartDate,
 			EndDate:     req.EndDate,
 		}
-		if err := h.service.Create(ctx.Request.Context(), created); err != nil {
-			ctx.JSON(http.StatusInternalServerError, err.Error())
+
+		if err := h.service.Create(ctx.Request.Context(), sub); err != nil {
+			h.log.Printf("create service error: %v", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.log.Printf("created subscription id=%s service=%s", created.ID, created.ServiceName)
-		ctx.JSON(http.StatusCreated, created)
-
+		ctx.JSON(http.StatusCreated, gin.H{})
 	}
 }
 
@@ -110,6 +116,7 @@ func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 			return
 		}
 		updated := &models.Subscription{
+			ID:          id,
 			ServiceName: req.ServiceName,
 			Price:       req.Price,
 			StartDate:   req.StartDate,
@@ -144,10 +151,10 @@ func (h *Handlers) DeleteHandler() gin.HandlerFunc {
 }
 
 type TotalCostRequest struct {
-	UserID      uuid.UUID `form:"user_id" binding:"required,uuid"`
-	ServiceName *string   `form:"service_name"`
-	StartDate   string    `form:"start_date" binding:"required,len=7"`
-	EndDate     *string   `form:"end_date"`
+	UserID      string  `form:"user_id" binding:"required"`
+	ServiceName *string `form:"service_name"`
+	StartDate   string  `form:"start_date" binding:"required,len=7"`
+	EndDate     *string `form:"end_date"`
 }
 
 func (h *Handlers) TotalCostHandler() gin.HandlerFunc {
@@ -159,7 +166,18 @@ func (h *Handlers) TotalCostHandler() gin.HandlerFunc {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		result, err := h.service.TotalCost(ctx.Request.Context(), req.UserID, req.ServiceName, req.StartDate, *req.EndDate)
+
+		userUUID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id UUID"})
+			return
+		}
+
+		endDateValue := ""
+		if req.EndDate != nil {
+			endDateValue = *req.EndDate
+		}
+		result, err := h.service.TotalCost(ctx.Request.Context(), userUUID, req.ServiceName, req.StartDate, endDateValue)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

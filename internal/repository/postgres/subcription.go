@@ -18,12 +18,18 @@ func NewSubscriptionRepository(pool *pgxpool.Pool) *SubscriptionRepository {
 }
 
 func (r *SubscriptionRepository) Create(ctx context.Context, sub *models.Subscription) error {
-	query := `INSERT INTO subscriptions (service_name,price,user_id,start_date, end_date)
-	VALUES($1,$2,$3,$4,$5)`
-	_, err := r.conn.Exec(ctx, query, sub.ServiceName, sub.Price, sub.UserID, sub.StartDate, sub.EndDate)
+	query := `INSERT INTO subscriptions (service_name, price, user_id, start_date, end_date)
+              VALUES($1, $2, $3, $4, $5) 
+              RETURNING id`
+
+	var id uuid.UUID
+	err := r.conn.QueryRow(ctx, query,
+		sub.ServiceName, sub.Price, sub.UserID, sub.StartDate, sub.EndDate).Scan(&id)
+
 	if err != nil {
 		return fmt.Errorf("Create: %w", err)
 	}
+
 	return nil
 }
 func (r *SubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error) {
@@ -60,12 +66,14 @@ func (r *SubscriptionRepository) List(ctx context.Context) ([]*models.Subscripti
 func (r *SubscriptionRepository) Update(ctx context.Context, sub *models.Subscription) error {
 	query := `UPDATE subscriptions 
 	SET service_name=COALESCE($1, service_name),
-		price=COALESCE($2, price),
-		start_date=COALESCE($3, start_date),
-		end_date=COALESCE($4, end_date)
-	WHERE id=$5`
+	price=COALESCE($2, price),
+	start_date=COALESCE($3, start_date),
+	end_date=COALESCE($4, end_date)
+	WHERE id=$5
+	RETURNING id, service_name, price, user_id, start_date, end_date, created_at`
 
-	_, err := r.conn.Exec(ctx, query, sub.ServiceName, sub.Price, sub.StartDate, sub.EndDate, sub.Price, sub.ID)
+	err := r.conn.QueryRow(ctx, query, sub.ServiceName, sub.Price, sub.StartDate, sub.EndDate, sub.ID).Scan(
+		&sub.ID, &sub.ServiceName, &sub.Price, &sub.UserID, &sub.StartDate, &sub.EndDate, &sub.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
@@ -87,10 +95,10 @@ func (r *SubscriptionRepository) TotalCost(ctx context.Context, userID uuid.UUID
 	FROM subscriptions
 	WHERE user_id = $1
 	AND (service_name = $2 OR $2 IS NULL)
-	AND start_date >=$3
-	AND (start_date <= $4 OR $4 IS NULL)`
+	AND start_date =$3
+	`
 	var total int
-	err := r.conn.QueryRow(ctx, query, userID, serviceName, startDate, endDate).Scan(&total)
+	err := r.conn.QueryRow(ctx, query, userID, serviceName, startDate).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("total:%w", err)
 	}

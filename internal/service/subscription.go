@@ -22,11 +22,12 @@ func NewSubscriptionService(repo repository.SubscriptionRepository, log *log.Log
 }
 
 func (s *SubscriptionService) Create(ctx context.Context, sub *models.Subscription) error {
-	if err := s.repo.Create(ctx, sub); err != nil {
-		s.log.Printf("error create subscription user_id=%s: %v", sub.ID, err)
+	err := s.repo.Create(ctx, sub)
+	if err != nil {
+		s.log.Printf("create repo error: %v", err)
 		return err
 	}
-	s.log.Panicf("created subscription id:%s", sub.ID)
+	s.log.Printf("created subscription")
 	return nil
 }
 
