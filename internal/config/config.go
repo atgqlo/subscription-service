@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -16,9 +17,9 @@ func Load() *Config {
 	return &Config{
 		PostgresHost: getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort: getEnv("POSTGRES_PORT", "5433"),
-		PostgresUser: getEnv("POSTGRES_USER", "todos"),
-		PostgresPass: getEnv("POSTGRES_PASSWORD", "todos"),
-		PostgresDB:   getEnv("POSTGRES_DB", "todos"),
+		PostgresUser: getEnv("POSTGRES_USER", "postgres"),
+		PostgresPass: getEnv("POSTGRES_PASSWORD", "password"),
+		PostgresDB:   getEnv("POSTGRES_DB", "subscriptions"),
 	}
 }
 
@@ -27,4 +28,14 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func (c *Config) PostgresURL() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		c.PostgresUser,
+		c.PostgresPass,
+		c.PostgresHost,
+		c.PostgresPort,
+		c.PostgresDB,
+	)
 }
