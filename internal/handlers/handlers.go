@@ -30,6 +30,16 @@ type CreateRequest struct {
 	EndDate     *string `json:"end_date"`
 }
 
+// CreateHandler godoc
+// @Summary      Создать подписку
+// @Description  Новая подписка пользователя
+// @Tags         subscriptions
+// @Accept       json
+// @Produce      json
+// @Param        request body     CreateRequest true "Данные подписки"
+// @Success      201  {object} models.Subscription
+// @Failure      400  {object} map[string]string
+// @Router       /subscriptions [post]
 func (h *Handlers) CreateHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var req CreateRequest
@@ -61,6 +71,15 @@ func (h *Handlers) CreateHandler() gin.HandlerFunc {
 	}
 }
 
+// GetByIDHandler godoc
+// @Summary      Получить подписку по ID
+// @Description  Детали подписки
+// @Tags         subscriptions
+// @Produce      json
+// @Param        id   path     string  true  "ID подписки"
+// @Success      200  {object} models.Subscription
+// @Failure      404  {object} map[string]string
+// @Router       /subscriptions/{id} [get]
 func (h *Handlers) GetByIDHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		idStr := ctx.Param("id")
@@ -81,6 +100,13 @@ func (h *Handlers) GetByIDHandler() gin.HandlerFunc {
 	}
 }
 
+// ListHandler godoc
+// @Summary      Все подписки
+// @Description  Список подписок пользователя
+// @Tags         subscriptions
+// @Produce      json
+// @Success      200  {array}  models.Subscription
+// @Router       /subscriptions [get]
 func (h *Handlers) ListHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		list, err := h.service.List(ctx)
@@ -100,6 +126,18 @@ type UpdateRequest struct {
 	EndDate     *string `json:"end_date"`
 }
 
+// UpdateHandler godoc
+// @Summary      Обновить подписку
+// @Description  Частичное обновление подписки по ID
+// @Tags         subscriptions
+// @Accept       json
+// @Produce      json
+// @Param        id      path     string     true        "ID подписки"
+// @Param        request body     UpdateRequest true   "Данные подписки"
+// @Success      200     {object} models.Subscription
+// @Failure      400     {object} map[string]string
+// @Failure      500     {object} map[string]string
+// @Router       /subscriptions/{id} [put]
 func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		idStr := ctx.Param("id")
@@ -130,6 +168,16 @@ func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 		ctx.JSON(http.StatusOK, updated)
 	}
 }
+
+// DeleteHandler godoc
+// @Summary      Удалить подписку
+// @Description  Полное удаление подписки по ID
+// @Tags         subscriptions
+// @Param        id   path     string     true        "ID подписки"
+// @Success      204  {string}  string     "No Content"
+// @Failure      404  {object}  map[string]string  "Подписка не найдена"
+// @Failure      500  {object}  map[string]string
+// @Router       /subscriptions/{id} [delete]
 func (h *Handlers) DeleteHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		idStr := ctx.Param("id")
@@ -150,38 +198,61 @@ func (h *Handlers) DeleteHandler() gin.HandlerFunc {
 	}
 }
 
-type TotalCostRequest struct {
-	UserID      string  `form:"user_id" binding:"required"`
-	ServiceName *string `form:"service_name"`
-	StartDate   string  `form:"start_date" binding:"required,len=7"`
-	EndDate     *string `form:"end_date"`
+type TotalCostResponse struct {
+	TotalCost int `json:"total_cost" example:"498"`
 }
 
+// totalCostHandler godoc
+// @Summary      Общая стоимость подписок за период
+// @Description  Сумма подписок с фильтрацией по user_id, service_name, датам
+// @Tags         subscriptions
+// @Produce      json
+// @Param        user_id      query    string  true   "User ID (UUID)"
+// @Param        service_name query    string  false  "Название сервиса (Yandex Plus)"
+// @Param        start_date   query    string  true   "Начало периода (MM-YYYY)"
+// @Param        end_date     query    string  true   "Конец периода (MM-YYYY)"
+// @Success      200          {object} TotalCostResponse
+// @Failure      400          {object} map[string]string
+// @Router       /subscriptions/total [get]
 func (h *Handlers) TotalCostHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var req TotalCostRequest
-
-		if err := ctx.ShouldBindQuery(&req); err != nil {
-			h.log.Printf("bad request: %v", err)
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		userIDStr := ctx.Query("user_id")
+		if userIDStr == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "user_id required"})
 			return
 		}
 
-		userUUID, err := uuid.Parse(req.UserID)
+		startDate := ctx.Query("start_date")
+		if startDate == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "start_date required (MM-YYYY)"})
+			return
+		}
+
+		endDate := ctx.Query("end_date")
+		if endDate == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "end_date required (MM-YYYY)"})
+			return
+		}
+
+		userUUID, err := uuid.Parse(userIDStr)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id UUID"})
 			return
 		}
 
-		endDateValue := ""
-		if req.EndDate != nil {
-			endDateValue = *req.EndDate
+		serviceName := ctx.Query("service_name")
+		var serviceNamePtr *string
+		if serviceName != "" {
+			serviceNamePtr = &serviceName
 		}
-		result, err := h.service.TotalCost(ctx.Request.Context(), userUUID, req.ServiceName, req.StartDate, endDateValue)
+
+		result, err := h.service.TotalCost(ctx.Request.Context(), userUUID, serviceNamePtr, startDate, endDate)
 		if err != nil {
+			h.log.Printf("total cost error: %v", err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+
 		ctx.JSON(http.StatusOK, result)
 	}
 }

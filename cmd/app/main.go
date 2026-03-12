@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	_ "subscriptons-service/docs"
 	"subscriptons-service/internal/config"
 	"subscriptons-service/internal/handlers"
 	"subscriptons-service/internal/repository/postgres"
