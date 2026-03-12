@@ -1,5 +1,7 @@
 REST API для управления подписками + подсчёт общей стоимости за период
 
+
+Запуск через docker:
 docker-compose up --build -d
 
 Endpoints:
