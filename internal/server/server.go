@@ -2,6 +2,8 @@ package server
 
 import (
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"log"
 	"subscriptons-service/internal/handlers"
 )
@@ -13,6 +15,9 @@ type Server struct {
 
 func NewServer(h *handlers.Handlers, logger *log.Logger) *Server {
 	r := gin.Default()
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	api := r.Group("/subscriptions")
 	{
 		api.POST("", h.CreateHandler())
