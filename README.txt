@@ -1,6 +1,8 @@
 REST API для управления подписками + подсчёт общей стоимости за период
 
+docker-compose up --build -d
 
+Endpoints:
 POST	/subscriptions	Создать подписку
 GET	/subscriptions	Список всех подписок
 GET	/subscriptions/total	Общая стоимость за период
