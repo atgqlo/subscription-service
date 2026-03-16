@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"subscriptons-service/internal/models"
 	"subscriptons-service/internal/service"
 
@@ -57,7 +58,7 @@ func (h *Handlers) CreateHandler() gin.HandlerFunc {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		ctx.JSON(http.StatusCreated, gin.H{})
+		ctx.JSON(http.StatusCreated, sub)
 	}
 }
 
@@ -81,22 +82,48 @@ func (h *Handlers) GetByIDHandler() gin.HandlerFunc {
 	}
 }
 
+type ListResponse struct {
+	Subscriptions []models.Subscription `json:"subscriptions"`
+	Pagination    struct {
+		Total  int `json:"total"`
+		Limit  int `json:"limit"`
+		Offset int `json:"offset"`
+		Pages  int `json:"pages"`
+	} `json:"pagination"`
+}
+
 func (h *Handlers) ListHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		list, err := h.service.List(ctx)
+		limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+		offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
+
+		list, total, err := h.service.List(ctx.Request.Context(), limit, offset)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.log.Printf("listed %d subscriptions", len(list))
-		ctx.JSON(http.StatusOK, list)
+
+		resp := ListResponse{
+			Subscriptions: make([]models.Subscription, 0, len(list)),
+		}
+		for _, sub := range list {
+			resp.Subscriptions = append(resp.Subscriptions, *sub)
+		}
+		resp.Pagination.Total = total
+		resp.Pagination.Limit = limit
+		resp.Pagination.Offset = offset
+		if limit > 0 {
+			resp.Pagination.Pages = (total + limit - 1) / limit
+		}
+
+		ctx.JSON(http.StatusOK, resp)
 	}
 }
 
 type UpdateRequest struct {
-	ServiceName string  `json:"service_name" binding:"required"`
-	Price       int     `json:"price" binding:"required,min=0"`
-	StartDate   string  `json:"start_date" binding:"required,len=7"`
+	ServiceName *string `json:"service_name" binding:"required"`
+	Price       *int    `json:"price" binding:"required,min=0"`
+	StartDate   *string `json:"start_date" binding:"required,len=7"`
 	EndDate     *string `json:"end_date"`
 }
 
@@ -116,13 +143,21 @@ func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 			return
 		}
 		updated := &models.Subscription{
-			ID:          id,
-			ServiceName: req.ServiceName,
-			Price:       req.Price,
-			StartDate:   req.StartDate,
-			EndDate:     req.EndDate,
+			ID: id,
 		}
-		if err := h.service.Update(ctx.Request.Context(), id, updated); err != nil {
+		if req.ServiceName != nil {
+			updated.ServiceName = *req.ServiceName
+		}
+		if req.Price != nil {
+			updated.Price = *req.Price
+		}
+		if req.StartDate != nil {
+			updated.StartDate = *req.StartDate
+		}
+		if req.EndDate != nil {
+			updated.EndDate = req.EndDate
+		}
+		if err := h.service.Update(ctx.Request.Context(), updated); err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -146,7 +181,7 @@ func (h *Handlers) DeleteHandler() gin.HandlerFunc {
 			return
 		}
 		h.log.Printf("delete subsription id: %s", id.String())
-		ctx.JSON(http.StatusOK, nil)
+		ctx.JSON(http.StatusNoContent, nil)
 	}
 }
 
@@ -167,6 +202,8 @@ func (h *Handlers) TotalCostHandler() gin.HandlerFunc {
 			return
 		}
 
+		h.log.Printf("DEBUG UserID=%q len=%d", req.UserID, len(req.UserID))
+
 		userUUID, err := uuid.Parse(req.UserID)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id UUID"})
@@ -177,11 +214,13 @@ func (h *Handlers) TotalCostHandler() gin.HandlerFunc {
 		if req.EndDate != nil {
 			endDateValue = *req.EndDate
 		}
+
 		result, err := h.service.TotalCost(ctx.Request.Context(), userUUID, req.ServiceName, req.StartDate, endDateValue)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		ctx.JSON(http.StatusOK, result)
+
+		ctx.JSON(http.StatusOK, gin.H{"total_cost": result})
 	}
 }

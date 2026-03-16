@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"subscriptons-service/internal/models"
 	"subscriptons-service/internal/repository"
@@ -41,22 +42,19 @@ func (s *SubscriptionService) GetByID(ctx context.Context, id uuid.UUID) (*model
 	return sub, nil
 }
 
-func (s *SubscriptionService) List(ctx context.Context) ([]*models.Subscription, error) {
-	subs, err := s.repo.List(ctx)
-	if err != nil {
-		s.log.Printf("error list subscriptions: %v", err)
-		return nil, err
+func (s *SubscriptionService) List(ctx context.Context, limit, offset int) ([]*models.Subscription, int, error) {
+	if limit > 100 || limit <= 0 {
+		return nil, 0, fmt.Errorf("limit must be 1-100")
 	}
-	s.log.Printf("listed %d subscriptions", len(subs))
-	return subs, nil
+	return s.repo.List(ctx, limit, offset)
 }
 
-func (s *SubscriptionService) Update(ctx context.Context, id uuid.UUID, sub *models.Subscription) error {
+func (s *SubscriptionService) Update(ctx context.Context, sub *models.Subscription) error {
 	if err := s.repo.Update(ctx, sub); err != nil {
-		s.log.Printf("error update subscription id=%s: %v", id, err)
+		s.log.Printf("error update subscription id=%s: %v", sub.ID, err)
 		return err
 	}
-	s.log.Printf("updated subscription id=%s", id)
+	s.log.Printf("updated subscription id=%s", sub.ID)
 	return nil
 }
 
