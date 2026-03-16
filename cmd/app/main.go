@@ -30,4 +30,5 @@ func main() {
 	if err := srv.Run(":8080"); err != nil && err != http.ErrServerClosed {
 		logger.Fatal(err)
 	}
+
 }

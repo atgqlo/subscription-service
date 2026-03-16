@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"subscriptons-service/internal/models"
 	"subscriptons-service/internal/service"
 
@@ -30,16 +31,6 @@ type CreateRequest struct {
 	EndDate     *string `json:"end_date"`
 }
 
-// CreateHandler godoc
-// @Summary      Создать подписку
-// @Description  Новая подписка пользователя
-// @Tags         subscriptions
-// @Accept       json
-// @Produce      json
-// @Param        request body     CreateRequest true "Данные подписки"
-// @Success      201  {object} models.Subscription
-// @Failure      400  {object} map[string]string
-// @Router       /subscriptions [post]
 func (h *Handlers) CreateHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var req CreateRequest
@@ -67,19 +58,10 @@ func (h *Handlers) CreateHandler() gin.HandlerFunc {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		ctx.JSON(http.StatusCreated, gin.H{})
+		ctx.JSON(http.StatusCreated, sub)
 	}
 }
 
-// GetByIDHandler godoc
-// @Summary      Получить подписку по ID
-// @Description  Детали подписки
-// @Tags         subscriptions
-// @Produce      json
-// @Param        id   path     string  true  "ID подписки"
-// @Success      200  {object} models.Subscription
-// @Failure      404  {object} map[string]string
-// @Router       /subscriptions/{id} [get]
 func (h *Handlers) GetByIDHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		idStr := ctx.Param("id")
@@ -100,44 +82,51 @@ func (h *Handlers) GetByIDHandler() gin.HandlerFunc {
 	}
 }
 
-// ListHandler godoc
-// @Summary      Все подписки
-// @Description  Список подписок пользователя
-// @Tags         subscriptions
-// @Produce      json
-// @Success      200  {array}  models.Subscription
-// @Router       /subscriptions [get]
+type ListResponse struct {
+	Subscriptions []models.Subscription `json:"subscriptions"`
+	Pagination    struct {
+		Total  int `json:"total"`
+		Limit  int `json:"limit"`
+		Offset int `json:"offset"`
+		Pages  int `json:"pages"`
+	} `json:"pagination"`
+}
+
 func (h *Handlers) ListHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		list, err := h.service.List(ctx)
+		limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+		offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
+
+		list, total, err := h.service.List(ctx.Request.Context(), limit, offset)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.log.Printf("listed %d subscriptions", len(list))
-		ctx.JSON(http.StatusOK, list)
+
+		resp := ListResponse{
+			Subscriptions: make([]models.Subscription, 0, len(list)),
+		}
+		for _, sub := range list {
+			resp.Subscriptions = append(resp.Subscriptions, *sub)
+		}
+		resp.Pagination.Total = total
+		resp.Pagination.Limit = limit
+		resp.Pagination.Offset = offset
+		if limit > 0 {
+			resp.Pagination.Pages = (total + limit - 1) / limit
+		}
+
+		ctx.JSON(http.StatusOK, resp)
 	}
 }
 
 type UpdateRequest struct {
-	ServiceName string  `json:"service_name" binding:"required"`
-	Price       int     `json:"price" binding:"required,min=0"`
-	StartDate   string  `json:"start_date" binding:"required,len=7"`
+	ServiceName *string `json:"service_name" binding:"required"`
+	Price       *int    `json:"price" binding:"required,min=0"`
+	StartDate   *string `json:"start_date" binding:"required,len=7"`
 	EndDate     *string `json:"end_date"`
 }
 
-// UpdateHandler godoc
-// @Summary      Обновить подписку
-// @Description  Частичное обновление подписки по ID
-// @Tags         subscriptions
-// @Accept       json
-// @Produce      json
-// @Param        id      path     string     true        "ID подписки"
-// @Param        request body     UpdateRequest true   "Данные подписки"
-// @Success      200     {object} models.Subscription
-// @Failure      400     {object} map[string]string
-// @Failure      500     {object} map[string]string
-// @Router       /subscriptions/{id} [put]
 func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		idStr := ctx.Param("id")
@@ -154,13 +143,21 @@ func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 			return
 		}
 		updated := &models.Subscription{
-			ID:          id,
-			ServiceName: req.ServiceName,
-			Price:       req.Price,
-			StartDate:   req.StartDate,
-			EndDate:     req.EndDate,
+			ID: id,
 		}
-		if err := h.service.Update(ctx.Request.Context(), id, updated); err != nil {
+		if req.ServiceName != nil {
+			updated.ServiceName = *req.ServiceName
+		}
+		if req.Price != nil {
+			updated.Price = *req.Price
+		}
+		if req.StartDate != nil {
+			updated.StartDate = *req.StartDate
+		}
+		if req.EndDate != nil {
+			updated.EndDate = req.EndDate
+		}
+		if err := h.service.Update(ctx.Request.Context(), updated); err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -168,16 +165,6 @@ func (h *Handlers) UpdateHandler() gin.HandlerFunc {
 		ctx.JSON(http.StatusOK, updated)
 	}
 }
-
-// DeleteHandler godoc
-// @Summary      Удалить подписку
-// @Description  Полное удаление подписки по ID
-// @Tags         subscriptions
-// @Param        id   path     string     true        "ID подписки"
-// @Success      204  {string}  string     "No Content"
-// @Failure      404  {object}  map[string]string  "Подписка не найдена"
-// @Failure      500  {object}  map[string]string
-// @Router       /subscriptions/{id} [delete]
 func (h *Handlers) DeleteHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		idStr := ctx.Param("id")
@@ -194,65 +181,44 @@ func (h *Handlers) DeleteHandler() gin.HandlerFunc {
 			return
 		}
 		h.log.Printf("delete subsription id: %s", id.String())
-		ctx.JSON(http.StatusOK, nil)
+		ctx.JSON(http.StatusNoContent, nil)
 	}
 }
 
-type TotalCostResponse struct {
-	TotalCost int `json:"total_cost" example:"498"`
+type TotalCostRequest struct {
+	UserID      string  `form:"user_id" binding:"required"`
+	ServiceName *string `form:"service_name"`
+	StartDate   string  `form:"start_date" binding:"required,len=7"`
+	EndDate     *string `form:"end_date"`
 }
 
-// totalCostHandler godoc
-// @Summary      Общая стоимость подписок за период
-// @Description  Сумма подписок с фильтрацией по user_id, service_name, датам
-// @Tags         subscriptions
-// @Produce      json
-// @Param        user_id      query    string  true   "User ID (UUID)"
-// @Param        service_name query    string  false  "Название сервиса (Yandex Plus)"
-// @Param        start_date   query    string  true   "Начало периода (MM-YYYY)"
-// @Param        end_date     query    string  true   "Конец периода (MM-YYYY)"
-// @Success      200          {object} TotalCostResponse
-// @Failure      400          {object} map[string]string
-// @Router       /subscriptions/total [get]
 func (h *Handlers) TotalCostHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		userIDStr := ctx.Query("user_id")
-		if userIDStr == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "user_id required"})
+		var req TotalCostRequest
+
+		if err := ctx.ShouldBindQuery(&req); err != nil {
+			h.log.Printf("bad request: %v", err)
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		startDate := ctx.Query("start_date")
-		if startDate == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "start_date required (MM-YYYY)"})
-			return
-		}
-
-		endDate := ctx.Query("end_date")
-		if endDate == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "end_date required (MM-YYYY)"})
-			return
-		}
-
-		userUUID, err := uuid.Parse(userIDStr)
+		userUUID, err := uuid.Parse(req.UserID)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id UUID"})
 			return
 		}
 
-		serviceName := ctx.Query("service_name")
-		var serviceNamePtr *string
-		if serviceName != "" {
-			serviceNamePtr = &serviceName
+		endDateValue := ""
+		if req.EndDate != nil {
+			endDateValue = *req.EndDate
 		}
 
-		result, err := h.service.TotalCost(ctx.Request.Context(), userUUID, serviceNamePtr, startDate, endDate)
+		result, err := h.service.TotalCost(ctx.Request.Context(), userUUID, req.ServiceName, req.StartDate, endDateValue)
 		if err != nil {
-			h.log.Printf("total cost error: %v", err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		ctx.JSON(http.StatusOK, result)
+		ctx.JSON(http.StatusOK, gin.H{"total_cost": result})
 	}
 }
