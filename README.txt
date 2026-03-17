@@ -13,4 +13,3 @@ PUT	/subscriptions/:id	Обновить подписку	200 OK
 DELETE	/subscriptions/:id	Удалить подписку	204 No Content
 
 
-swagger: http://localhost:8080/swagger/index.html
