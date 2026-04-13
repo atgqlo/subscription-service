@@ -68,11 +68,16 @@ func (s *SubscriptionService) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *SubscriptionService) TotalCost(ctx context.Context, userID uuid.UUID, serviceName *string, startDate, endDate string) (int, error) {
-	total, err := s.repo.TotalCost(ctx, userID, serviceName, startDate, endDate)
+	subs, err := s.repo.FindSubscriptions(ctx, userID, serviceName, startDate, endDate)
 	if err != nil {
-		s.log.Printf("error total cost user=%s: %v", userID, err)
+		s.log.Printf("error finding subs: %v", err)
 		return 0, err
 	}
-	s.log.Printf("total cost user=%s: %d руб", userID, total)
+	var total int
+
+	for _, sub := range subs {
+		total += sub.Price
+	}
+	s.log.Printf("total cost user: %v", err)
 	return total, nil
 }

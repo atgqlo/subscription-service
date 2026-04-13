@@ -12,11 +12,11 @@ import (
 )
 
 type Handlers struct {
-	service *service.SubscriptionService
+	service service.SubscriptionServiceInterface
 	log     *log.Logger
 }
 
-func NewSubscriptionHandler(service *service.SubscriptionService, log *log.Logger) *Handlers {
+func NewSubscriptionHandler(service service.SubscriptionServiceInterface, log *log.Logger) *Handlers {
 	return &Handlers{
 		service: service,
 		log:     log,

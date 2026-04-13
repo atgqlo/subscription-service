@@ -100,23 +100,31 @@ func (r *SubscriptionRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return nil
 }
 
-func (r *SubscriptionRepository) TotalCost(ctx context.Context, userID uuid.UUID, serviceName *string, startDate, endDate string) (int, error) {
+func (r *SubscriptionRepository) FindSubscriptions(ctx context.Context, userID uuid.UUID, serviceName *string, startDate, endDate string) ([]*models.Subscription, error) {
 	if endDate == "" {
 		endDate = startDate
 	}
 	query := `
-        SELECT COALESCE(SUM(price), 0)
-        FROM subscriptions
-        WHERE user_id = $1
-          AND ($2::text IS NULL OR service_name ILIKE '%' || $2::text || '%')
-          AND start_date <= $4
-          AND COALESCE(end_date, '99-9999') >= $3
-    `
-	var total int
-	err := r.conn.QueryRow(ctx, query, userID, serviceName, startDate, endDate).Scan(&total)
+		SELECT id, price, service_name
+		FROM subscriptions
+		WHERE user_id = $1
+		  AND ($2::text IS NULL OR service_name ILIKE '%' || $2::text || '%')
+		  AND start_date <= $4
+		  AND COALESCE(end_date, '99-9999') >= $3
+	`
+	rows, err := r.conn.Query(ctx, query, userID, serviceName, startDate, endDate)
 	if err != nil {
-		return 0, fmt.Errorf("total:%w", err)
+		return nil, fmt.Errorf("find subs: %w", err)
 	}
-	return total, nil
+	defer rows.Close()
 
+	var subs []*models.Subscription
+	for rows.Next() {
+		var sub models.Subscription
+		if err := rows.Scan(&sub.ID, &sub.Price, &sub.ServiceName); err != nil {
+			return nil, err
+		}
+		subs = append(subs, &sub)
+	}
+	return subs, nil
 }

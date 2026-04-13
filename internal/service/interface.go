@@ -1,4 +1,4 @@
-package repository
+package service
 
 import (
 	"context"
@@ -7,11 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
-type SubscriptionRepository interface {
+type SubscriptionServiceInterface interface {
 	Create(ctx context.Context, sub *models.Subscription) error
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error)
 	List(ctx context.Context, limit, offset int) ([]*models.Subscription, int, error)
 	Update(ctx context.Context, sub *models.Subscription) error
 	Delete(ctx context.Context, id uuid.UUID) error
-	FindSubscriptions(ctx context.Context, userID uuid.UUID, serviceName *string, startDate, endDate string) ([]*models.Subscription, error)
+	TotalCost(ctx context.Context, userID uuid.UUID, serviceName *string, startDate, endDate string) (int, error)
 }
